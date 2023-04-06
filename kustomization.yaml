@@ -1,0 +1,90 @@
+namespace: jenkins
+
+resources:
+  - ./jenkins-namespace.yaml
+  - ./jenkins-pvc.yaml
+  - ./docker-registry.yaml
+
+helmCharts:
+  - name: jenkins
+    includeCRDs: true
+    repo: https://charts.jenkins.io
+    releaseName: jenkins
+    namespace: jenkins
+    version: 4.3.5
+    valuesInline:
+      controller:
+        testEnabled: false
+        sidecars:
+          configAutoReload:
+            enabled: true
+          other:
+            - name: dind
+              image: docker:dind-rootless
+              imagePullPolicy: IfNotPresent
+              command: [dockerd-entrypoint.sh]
+              securityContext:
+                privileged: true
+              env:
+                - name: DOCKER_TLS_CERTDIR
+                  value: '/certs'
+                - name: DOCKER_HOST
+                  value: 'unix:///run/user/1000/docker.sock'
+              volumeMounts:
+                - name: docker-rootless
+                  mountPath: /run/user/1000
+                - name: jenkins-home
+                  mountPath: /var/jenkins_home
+        runsAsUser: 1000
+        fsGroup: 1000
+        podSecurityContextOverride:
+          runAsUser: 1000
+          fsGroup: 1000
+          runAsNonRoot: true
+          supplementalGroups: [1000]
+        containerSecurityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+          runAsNonRoot: true
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+        image: 'ingkle/jenkins' # Jenkins image with docker rootless with your own docker registry
+        tag: 'latest'
+        imagePullSecretName: docker-registry
+        adminSecret: true
+        adminUser: 'admin'
+        adminPassword: 'admin'
+        numExecutors: 2 # It can not be set to more than 2. It depends on the number of node's cpu cores
+        executorMode: 'NORMAL'
+        jenkinsHome: '/var/jenkins_home'
+        resources:
+          requests:
+            cpu: 50m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 2Gi
+        installPlugins:
+          - configuration-as-code:1569.vb_72405b_80249 # For jenkins configuration
+          # - Add more plugins here
+        JCasC:
+          defaultConfig: false
+        workspaceVolume:
+          emptyDirWorkspaceVolume:
+            memory: false
+          crumbIssuer:
+            standard:
+              excludeClientIPFromCrumb: true
+      persistence:
+        enabled: true
+        existingClaim: jenkins-pv-claim
+        volumes:
+          - name: docker-rootless
+            emptyDir: {}
+          - name: jenkins-home
+            emptyDir: {}
+        mounts:
+          - name: docker-rootless
+            mountPath: /run/user/1000
+      serviceAccount:
+        create: true

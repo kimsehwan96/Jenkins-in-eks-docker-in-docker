@@ -1,0 +1,20 @@
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: docker-registry
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: secretstore-vault
+    kind: ClusterSecretStore
+  target:
+    name: docker-registry
+    creationPolicy: Owner
+    template:
+      type: kubernetes.io/dockerconfigjson
+      data:
+        .dockerconfigjson: '{{ .ingkle | toString }}'
+  data:
+    - secretKey: ingkle
+      remoteRef:
+        key: secret/ingkle/dockerhub/secrets
